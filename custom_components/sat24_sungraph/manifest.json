@@ -1,0 +1,10 @@
+{
+  "domain": "sat24_sungraph",
+  "name": "SAT24 SunGraph",
+  "version": "1.0.0",
+  "documentation": "https://github.com/sumek/sat24",
+  "requirements": ["requests", "beautifulsoup4"],
+  "codeowners": ["@sumek"],
+  "config_flow": true,
+  "iot_class": "cloud_polling"
+}
