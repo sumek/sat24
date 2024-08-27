@@ -4,7 +4,7 @@ import re
 import json
 from datetime import datetime, timedelta
 from homeassistant.components.sensor import SensorEntity
-from homeassistant.helpers.event import track_time_interval
+from homeassistant.helpers.event import async_track_time_interval
 from .const import DOMAIN
 
 DEFAULT_CITY_ID = 19989
@@ -14,6 +14,13 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
     """Setup the sensor platform."""
     city_id = config.get("city_id", DEFAULT_CITY_ID)
     scan_interval_minutes = config.get("scan_interval", DEFAULT_SCAN_INTERVAL)
+
+    if isinstance(scan_interval_minutes, timedelta):
+        scan_interval_minutes = int(scan_interval_minutes.total_seconds() / 60)
+    elif not isinstance(scan_interval_minutes, int):
+        raise TypeError("scan_interval must be an integer representing minutes")
+
+
     scan_interval = timedelta(minutes=scan_interval_minutes)
     sensors = []
 
@@ -24,7 +31,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
             hour = entry["date"].split(' ')[1].replace(':', '_')
             sunshine_duration = round(entry["sunshineduration"])
             sensor_id = f"sat24_{hour}"
-            sensor = SunGraphSensor(sensor_id, sunshine_duration, "%", "mdi:weather-sunny")
+            sensor = SunGraphSensor(sensor_id, sunshine_duration, "%", "mdi:weather-sunny", hass)
             sensors.append(sensor)
 
         current_time = datetime.now().strftime('%H:00:00').replace(':', '_')
@@ -34,7 +41,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
         else:
             current_sunshine_duration = 0
 
-        current_sensor = SunGraphSensor("sat24_current", current_sunshine_duration, "%", "mdi:weather-sunny")
+        current_sensor = SunGraphSensor("sat24_current", current_sunshine_duration, "%", "mdi:weather-sunny", hass)
         sensors.append(current_sensor)
 
         next_time = (datetime.now().replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)).strftime('%H:%M:%S').replace(':', '_')
@@ -44,12 +51,12 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
         else:
             next_sunshine_duration = 0
 
-        next_sensor = SunGraphSensor("sat24_next", next_sunshine_duration, "%", "mdi:weather-sunny")
+        next_sensor = SunGraphSensor("sat24_next", next_sunshine_duration, "%", "mdi:weather-sunny", hass)
         sensors.append(next_sensor)
 
     add_entities(sensors, True)
 
-    track_time_interval(hass, lambda now: update_sensors(hass, city_id, sensors), scan_interval)
+    async_track_time_interval(hass, lambda now: update_sensors(hass, city_id, sensors), scan_interval)
 
 def fetch_sungraph_data(city_id):
     """Fetch the sun graph data from SAT24."""
@@ -95,13 +102,14 @@ def update_sensors(hass, city_id, sensors):
 class SunGraphSensor(SensorEntity):
     """Representation of a SunGraph Sensor."""
 
-    def __init__(self, entity_id, sunshineduration, unit_of_measurement, icon):
+    def __init__(self, entity_id, sunshineduration, unit_of_measurement, icon, hass):
         """Initialize the sensor."""
         self.entity_id = f"sensor.{entity_id}"
         self._state = sunshineduration
         self._name = entity_id
         self._unit_of_measurement = unit_of_measurement
         self._icon = icon
+        self.hass = hass
 
     @property
     def name(self):
@@ -126,4 +134,4 @@ class SunGraphSensor(SensorEntity):
     def set_state(self, sunshineduration):
         """Set the state of the sensor."""
         self._state = sunshineduration
-        self.async_schedule_update_ha_state()
+        self.hass.add_job(self.async_schedule_update_ha_state)
